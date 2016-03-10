@@ -1104,7 +1104,8 @@ function PathToSVGShadowPath(svgPath, width, height)
 				frontfacePaths[itrA] = frontfacePathA;
 				startPathA = frontfacePathA[0];
 				endPathA = frontfacePathA[frontfacePathA.length - 1];
-				frontfacePaths.splice(itrB--, 1);
+				frontfacePaths.splice(itrB, 1);
+				itrB = itrA;
 			}
 			else if (Math.abs(endPathA.endX - startPathB.startX) < epsilon && Math.abs(endPathA.endY - startPathB.startY) < epsilon)
 			{
@@ -1114,7 +1115,8 @@ function PathToSVGShadowPath(svgPath, width, height)
 					frontfacePaths[itrA].push(frontfacePaths[itrB][itrAppend]);
 				}
 				endPathA = frontfacePathA[frontfacePathA.length - 1];
-				frontfacePaths.splice(itrB--, 1);
+				frontfacePaths.splice(itrB, 1);
+				itrB = itrA;
 			}
 		}
 	}
@@ -1207,23 +1209,131 @@ function PathToSVGShadowPath(svgPath, width, height)
 			return path1.depth < path2.depth ? -1 : 1;
 		});
 		
-		for (var itr = 0; itr < frontFaceGroup.length; ++itr)
+		var removeCurrentPathFromGroup = function()
 		{
-			// Check if it's part of the current and isn't the only one with the same index. Add it to the current path then else not sure
-			// If it's not part of the current path we need to wait since it could be part of the new current path in which case we need to add them to the current path
+			for (var itr = 0; itr < frontFaceGroup.length - 1; ++itr)
+			{
+				// If the first frontface is part of the current path and the next item in the frontface group is also part of the current path then include it in the path.
+				if (frontFaceGroup[itr].index == current.index && frontFaceGroup[itr + 1].index == current.index)
+				{
+					AddShadowVolumePath(current.path);
+					current = frontFaceGroup[itr];
+					frontFaceGroup.splice(itr--, 1);
+				}
+				else
+				{
+					break;
+				}
+			}
+		};
+		
+		var appendCurrentPathsFromGroup = function()
+		{
+			for (var itr = 0; itr < frontFaceGroup.length; ++itr)
+			{
+				if (frontFaceGroup[itr].index == current.index)
+				{
+					AddShadowVolumePath(current.path);
+					current = frontFaceGroup[itr];
+					frontFaceGroup.splice(itr--, 1);
+				}
+				else
+				{
+					break;
+				}
+			}
+		};
+		
+		var removeSamePathsFromGroup = function()
+		{
+			for (var itr = 0; itr < frontFaceGroup.length - 1; ++itr)
+			{
+				if (frontFaceGroup[itr].index == current.index && frontFaceGroup[itr + 1].index == current.index)
+				{
+					frontFaceGroup.splice(itr--, 1);
+				}
+				else
+				{
+					break;
+				}
+			}
+		};
+		
+		var removeRedundantPathsFromGroupKeepingLast = function()
+		{
+			// Remove paths that belong to the same index keeping the last one
+			for (var itr = 0; itr < frontFaceGroup.length - 1; ++itr)
+			{
+				if (frontFaceGroup[itr].index == frontFaceGroup[itr + 1].index)
+				{
+					frontFaceGroup.splice(itr--, 1);
+				}
+			}
+		};
+		
+		// TODO: Is this necessary? The startedPath code might remove this since it'll find both the start and end when looping.
+		// Special case code to remove paths if the frontFaceGroup contains both the start and end of the path. This is probably a diagonal line by itself.
+		for (var itr1 = 0; itr1 < frontFaceGroup.length - 1; ++itr1)
+		{
+			var path1 = frontFaceGroup[itr1];
+			if (path1.start)
+			{
+				// path1 is a start path. Search after this point to find the path's end. If it exists remove the whole path
+				for (var itr2 = itr1 + 1; itr2 < frontFaceGroup.length; ++itr2)
+				{
+					var path2 = frontFaceGroup[itr2];
+					if (path2.index == path1.index && path2.end)
+					{
+						frontFaceGroup.splice(itr1--, itr2 - itr1 + 1);
+						break;
+					}
+				}
+			}
+		}
+		// The previous removal of paths could have removed all of the paths. If that happens move to the next group
+		if (frontFaceGroup.length == 0)
+		{
+			continue;
 		}
 		
 		if (current == null)
 		{
 			// Push the itr and if it's a start or end. If it's an end then if it has the same itr then continue else check distance and raycast stuff.
-			current = frontFaceGroup[0];
-			for (var itr = 1; itr < frontFaceGroup.length; ++itr)
+			do
 			{
-				startedPaths.push(frontFaceGroup[itr]);
+				current = frontFaceGroup.shift();
+			} while (frontFaceGroup.length != 0 && frontFaceGroup[0].index == current.index);
+			// TODO: Abstract this code since it's duplicated a few time
+			for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
+			{
+				var path = frontFaceGroup[frontFaceGroupItr];
+				var removedOrReplaced = false;
+				for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
+				{
+					if (startedPaths[startedPathsItr].index == path.index)
+					{
+						if (path.end)
+						{
+							startedPaths.splice(startedPathsItr--, 1);
+						}
+						else
+						{
+							startedPaths[startedPathsItr] = path;
+						}
+						removedOrReplaced = true;
+						break;
+					}
+				}
+				if (!path.end && !removedOrReplaced)
+				{
+					startedPaths.push(path);
+				}
 			}
 		}
 		else
 		{
+			removeCurrentPathFromGroup();
+			
 			var hasCurrentNextPath = null;
 			var hasCurrentEndPath = null;
 			for (var itr = 0; itr < frontFaceGroup.length; ++itr)
@@ -1244,12 +1354,14 @@ function PathToSVGShadowPath(svgPath, width, height)
 					{
 						if (startedPaths[startedPathsItr].index == path.index)
 						{
-							if (path.end)
-							{
-								startedPaths.splice(startedPathsItr--, 1);
-								break;
-							}
+							startedPaths.splice(startedPathsItr--, 1);
+							break;
 						}
+					}
+					// Go backwards and remove any path in the front face group with the same index. Since this group has the end path then any part of the path is no longer useful.
+					while (itr >= 0 && frontFaceGroup[itr].index == path.index)
+					{
+						frontFaceGroup.splice(itr--, 1);
 					}
 				}
 			}
@@ -1352,6 +1464,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 					{
 						AddShadowVolumePath(connectingPath);
 						current = next;
+						// removeSamePathsFromGroup();
 						if (frontFaceGroupIndex != null)
 						{
 							frontFaceGroup.splice(frontFaceGroupIndex, 1);
@@ -1397,8 +1510,9 @@ function PathToSVGShadowPath(svgPath, width, height)
 				else
 				{
 					// This is still the same front face so add it to the volume path and update the top of the depth queue.
-					current = frontFaceGroup[0];
-					for (var frontFaceGroupItr = 1; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
+					current = frontFaceGroup.shift();
+					appendCurrentPathsFromGroup();
+					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
 					{
 						var path = frontFaceGroup[frontFaceGroupItr];
 						var removedOrReplaced = false;
@@ -1441,7 +1555,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 						{
 							startedPaths.push(current);
 						}
-						current = frontFaceGroup[0];
+						current = frontFaceGroup.shift();
 					}
 					else
 					{
@@ -1455,11 +1569,11 @@ function PathToSVGShadowPath(svgPath, width, height)
 									AddShadowVolumePath(intersection.first);
 									AddShadowVolumePath({ type: 'L', startX: intersection.x, startY: intersection.y, endX: path.startX, endY: path.startY });
 									startedPaths.push(current);
-									current = frontFaceGroup[0];
+									current = frontFaceGroup.shift();
 								}
 								else
 								{
-									startedPaths.push(frontFaceGroup[0]);
+									startedPaths.push(frontFaceGroup.shift());
 								}
 								break;
 							case 'C':
@@ -1469,11 +1583,11 @@ function PathToSVGShadowPath(svgPath, width, height)
 									AddShadowVolumePath(intersection.first);
 									AddShadowVolumePath({ type: 'L', startX: intersection.x, startY: intersection.y, endX: path.startX, endY: path.startY });
 									startedPaths.push(current);
-									current = frontFaceGroup[0];
+									current = frontFaceGroup.shift();
 								}
 								else
 								{
-									startedPaths.push(frontFaceGroup[0]);
+									startedPaths.push(frontFaceGroup.shift());
 								}
 								break;
 							case 'A':
@@ -1483,16 +1597,17 @@ function PathToSVGShadowPath(svgPath, width, height)
 									AddShadowVolumePath(intersection.first);
 									AddShadowVolumePath({ type: 'L', startX: intersection.x, startY: intersection.y, endX: path.startX, endY: path.startY });
 									startedPaths.push(current);
-									current = frontFaceGroup[0];
+									current = frontFaceGroup.shift();
 								}
 								else
 								{
-									startedPaths.push(frontFaceGroup[0]);
+									startedPaths.push(frontFaceGroup.shift());
 								}
 								break;
 						}
 					}
-					for (var frontFaceGroupItr = 1; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
+					appendCurrentPathsFromGroup();
+					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
 					{
 						var path = frontFaceGroup[frontFaceGroupItr];
 						var removedOrReplaced = false;
@@ -1534,12 +1649,29 @@ function PathToSVGShadowPath(svgPath, width, height)
 				else
 				{
 					// Processing a subpath that is neither the start nor the end, so update the startedPaths to point to the current subpath for that front face path.
-					for (var itr = 0; itr < startedPaths.length; ++itr)
+					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
 					{
-						if (startedPaths[itr].index == frontFaceGroup[0].index)
+						var path = frontFaceGroup[frontFaceGroupItr];
+						var removedOrReplaced = false;
+						for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
 						{
-							startedPaths[itr] = frontFaceGroup[0];
-							break;
+							if (startedPaths[startedPathsItr].index == path.index)
+							{
+								if (path.end)
+								{
+									startedPaths.splice(startedPathsItr--, 1);
+								}
+								else
+								{
+									startedPaths[startedPathsItr] = path;
+								}
+								removedOrReplaced = true;
+								break;
+							}
+						}
+						if (!path.end && !removedOrReplaced)
+						{
+							startedPaths.push(path);
 						}
 					}
 				}
@@ -1556,12 +1688,12 @@ function PathToSVGShadowPath(svgPath, width, height)
 		var startPositionY = shadowVolumePath[0].startY;
 		var endPositionX = endPath.endX;
 		var endPositionY = endPath.endY;
-			
+		
 		var startIntersectBottomX = startPositionX + lightDirection.x * (height - startPositionY) / lightDirection.y;
 		var startIntersectRightY = startPositionY + lightDirection.y * (width - startPositionX) / lightDirection.x;
 		var endIntersectBottomX = endPositionX + lightDirection.x * (height - endPositionY) / lightDirection.y;
 		var endIntersectRightY = endPositionY + lightDirection.y * (width - endPositionX) / lightDirection.x;
-			
+		
 		// TODO: Correct for floating point errors
 		if (startPositionY == height && endPositionY == height)
 		{
@@ -1612,6 +1744,32 @@ function PathToSVGShadowPath(svgPath, width, height)
 				shadowVolumePath.push({ type: 'L', startX: endIntersectBottomX, startY: height, endX: startIntersectBottomX, endY: height });
 			}
 			shadowVolumePath.push({ type: 'Z' });
+		}
+		
+		for (var pathItr = 0; pathItr < shadowVolumePath.length; ++pathItr)
+		{
+			var previous = shadowVolumePath[(pathItr + shadowVolumePath.length - 1) % shadowVolumePath.length];
+			var current = shadowVolumePath[pathItr];
+			if (previous.type == 'L' && current.type == 'L')
+			{
+				var directionX = current.endX - previous.startX;
+				var directionY = current.endY - previous.startY;
+				var distance = Math.sqrt(directionX * directionX + directionY * directionY);
+				if (distance > 1) // magic number so we don't remove small curves
+				{
+					directionX /= distance;
+					directionY /= distance;
+					var previousDirectionX = previous.endX - previous.startX;
+					var previousDirectionY = previous.endY - previous.startY;
+					// Project the previousDirection onto the normal of the direction vector and calculate the distance
+					if (Math.abs(previousDirectionX * directionY - previousDirectionY * directionX) < 0.1)
+					{
+						previous.endX = current.endX;
+						previous.endY = current.endY;
+						shadowVolumePath.splice(pathItr--, 1);
+					}
+				}
+			}
 		}
 		
 		var RoundFloat = function(value)
@@ -1688,7 +1846,7 @@ $(document).ready(function ()
 				var name = line.slice(0, i);
 				var path = line.slice(i + 1);
 				
-				/*$('body').append
+				$('body').append
 				(
 					$('<p></p>').text(name),
 					'<svg style="width:24px;height:24px" viewBox="0 0 24 24">' +
@@ -1696,7 +1854,7 @@ $(document).ready(function ()
 						//'<path class="shadow" fill="#000000" fill-opacity="0.5" d="M0,0"></path>' +
 						'<path class="geometry" fill="#000000" d=' + path + ' />' +
 					'</svg>'
-				);*/
+				);
 			});
 			GenerateShadows();
 		}
@@ -1711,7 +1869,7 @@ $(document).ready(function ()
 	<svg style="width:24px;height:24px" viewBox="0 0 24 24">
 		<!--<path class="shadow" fill="#000000" fill-opacity="0.5" d="M0,0"></path>-->
 		<path class="shadow" fill="none" stroke="#ff0000" stroke-opacity="0.3" stroke-width="1" d="M0,0"></path>
-		<path class="geometry" fill="#000000" d="M15,9L3.03,9.06L3,9.12L3,9.16L3,12Z" />
+		<path class="geometry" fill="#000000" d="" />
 	</svg>
 </body>
 </html>
