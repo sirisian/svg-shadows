@@ -684,7 +684,28 @@ function PathToSVGShadowPath(svgPath, width, height)
 					var x = position.x + args[itr + 2].x;
 					var y = position.y + args[itr + 2].y;
 					
-					throw 'Not implemented';
+					var tvals = CubicBezierTimeAtTangent(position.x, position.y, x1, y1, x2, y2, x, y, lightDirection.x, lightDirection.y);
+					
+					if (tvals.length > 0)
+					{
+						var split1 = SplitCubicBezier(tvals[0], position.x, position.y, x1, y1, x2, y2, x, y);
+						AddPath(split1.first);
+						if (tvals.length > 1)
+						{
+							var split2 = SplitCubicBezier((tvals[1] - tvals[0]) / (1 - tvals[0]), split1.second.startX, split1.second.startY, split1.second.x1, split1.second.y1, split1.second.x2, split1.second.y2, split1.second.endX, split1.second.endY);
+							AddPath(split2.first);
+							AddPath(split2.second);
+						}
+						else
+						{
+							AddPath(split1.second);
+						}
+					}
+					else
+					{
+						var normal = { x: y - position.y, y: position.x - x };
+						AddPath({ type: 'C', startX: position.x, startY: position.y, x1: x1, y1: y1, x2: x2, y2: y2, endX: x, endY: y });
+					}
 					
 					position.x = x;
 					position.y = y;
