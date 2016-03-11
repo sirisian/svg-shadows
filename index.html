@@ -40,9 +40,18 @@ $(document).ready(function ()
 				$('body').append
 				(
 					$('<p></p>').text(name),
-					'<svg style="width:24px;height:24px" viewBox="0 0 24 24">' +
+					'<svg width="24" height="24">' +
+						'<defs>' +
+							'<filter id="blur" x="0" y="0">' +
+								'<feGaussianBlur in="SourceGraphic" stdDeviation="0.4" />' +
+							'</filter>' +
+							'<linearGradient id="Gradient" x1="0" y1="0" x2="1" y2="1">' +
+								'<stop offset="0%" stop-color="rgba(0,0,0,0.4)"/>' +
+								'<stop offset="100%" stop-color="rgba(0,0,0,0)"/>' +
+							'</linearGradient>' +
+						'</defs>' +
 						'<path class="shadow" fill="none" stroke="#ff0000" stroke-opacity="0.3" stroke-width="1" d="M0,0"></path>' +
-						//'<path class="shadow" fill="#000000" fill-opacity="0.5" d="M0,0"></path>' +
+						//'<path class="shadow" fill="url(#Gradient)" style="filter: url(#blur);" d="M0,0"></path>' +
 						'<path class="geometry" fill="#000000" d=' + path + ' />' +
 					'</svg>'
 				);
