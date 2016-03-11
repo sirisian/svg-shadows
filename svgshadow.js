@@ -1279,6 +1279,35 @@ function PathToSVGShadowPath(svgPath, width, height)
 			}
 		};
 		
+		var mergeFrontFacePathsIntoStartedPaths = function()
+		{
+			for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
+			{
+				var path = frontFaceGroup[frontFaceGroupItr];
+				var removedOrReplaced = false;
+				for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
+				{
+					if (startedPaths[startedPathsItr].index == path.index)
+					{
+						if (path.end)
+						{
+							startedPaths.splice(startedPathsItr--, 1);
+						}
+						else
+						{
+							startedPaths[startedPathsItr] = path;
+						}
+						removedOrReplaced = true;
+						break;
+					}
+				}
+				if (!path.end && !removedOrReplaced)
+				{
+					startedPaths.push(path);
+				}
+			}
+		};
+		
 		// TODO: Is this necessary? The startedPath code might remove this since it'll find both the start and end when looping.
 		// Special case code to remove paths if the frontFaceGroup contains both the start and end of the path. This is probably a diagonal line by itself.
 		for (var itr1 = 0; itr1 < frontFaceGroup.length - 1; ++itr1)
@@ -1311,32 +1340,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 			{
 				current = frontFaceGroup.shift();
 			} while (frontFaceGroup.length != 0 && frontFaceGroup[0].index == current.index);
-			// TODO: Abstract this code since it's duplicated a few time
-			for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
-			{
-				var path = frontFaceGroup[frontFaceGroupItr];
-				var removedOrReplaced = false;
-				for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
-				{
-					if (startedPaths[startedPathsItr].index == path.index)
-					{
-						if (path.end)
-						{
-							startedPaths.splice(startedPathsItr--, 1);
-						}
-						else
-						{
-							startedPaths[startedPathsItr] = path;
-						}
-						removedOrReplaced = true;
-						break;
-					}
-				}
-				if (!path.end && !removedOrReplaced)
-				{
-					startedPaths.push(path);
-				}
-			}
+			mergeFrontFacePathsIntoStartedPaths();
 		}
 		else
 		{
@@ -1520,31 +1524,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 					// This is still the same front face so add it to the volume path and update the top of the depth queue.
 					current = frontFaceGroup.shift();
 					appendCurrentPathsFromGroup();
-					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
-					{
-						var path = frontFaceGroup[frontFaceGroupItr];
-						var removedOrReplaced = false;
-						for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
-						{
-							if (startedPaths[startedPathsItr].index == path.index)
-							{
-								if (path.end)
-								{
-									startedPaths.splice(startedPathsItr--, 1);
-								}
-								else
-								{
-									startedPaths[startedPathsItr] = path;
-								}
-								removedOrReplaced = true;
-								break;
-							}
-						}
-						if (!path.end && !removedOrReplaced)
-						{
-							startedPaths.push(path);
-						}
-					}
+					mergeFrontFacePathsIntoStartedPaths();
 				}
 			}
 			else
@@ -1615,31 +1595,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 						}
 					}
 					appendCurrentPathsFromGroup();
-					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
-					{
-						var path = frontFaceGroup[frontFaceGroupItr];
-						var removedOrReplaced = false;
-						for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
-						{
-							if (startedPaths[startedPathsItr].index == path.index)
-							{
-								if (path.end)
-								{
-									startedPaths.splice(startedPathsItr--, 1);
-								}
-								else
-								{
-									startedPaths[startedPathsItr] = path;
-								}
-								removedOrReplaced = true;
-								break;
-							}
-						}
-						if (!path.end && !removedOrReplaced)
-						{
-							startedPaths.push(path);
-						}
-					}
+					mergeFrontFacePathsIntoStartedPaths();
 				}
 				else if (frontFaceGroup[0].end)
 				{
@@ -1657,31 +1613,7 @@ function PathToSVGShadowPath(svgPath, width, height)
 				else
 				{
 					// Processing a subpath that is neither the start nor the end, so update the startedPaths to point to the current subpath for that front face path.
-					for (var frontFaceGroupItr = 0; frontFaceGroupItr < frontFaceGroup.length; ++frontFaceGroupItr)
-					{
-						var path = frontFaceGroup[frontFaceGroupItr];
-						var removedOrReplaced = false;
-						for (var startedPathsItr = 0; startedPathsItr < startedPaths.length; ++startedPathsItr)
-						{
-							if (startedPaths[startedPathsItr].index == path.index)
-							{
-								if (path.end)
-								{
-									startedPaths.splice(startedPathsItr--, 1);
-								}
-								else
-								{
-									startedPaths[startedPathsItr] = path;
-								}
-								removedOrReplaced = true;
-								break;
-							}
-						}
-						if (!path.end && !removedOrReplaced)
-						{
-							startedPaths.push(path);
-						}
-					}
+					mergeFrontFacePathsIntoStartedPaths();
 				}
 			}
 		}
